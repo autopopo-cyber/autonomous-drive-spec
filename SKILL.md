@@ -288,6 +288,8 @@ This keeps the autonomous loop making forward progress instead of retrying the s
 - **Shock + solution** beats **description + feature list**
 - HN prefers anti-hype honesty: "Not AGI. Just a Chef Sharpening Knives Between Orders."
 - Reddit prefers emotional hooks: "I Gave My AI Agent a Survival Instinct"
+- Chinese audience: "赋予Agent生命的Skill！" — 生命感钩子
+- User principle: "标题需要有冲击力，在诚实的前提下" — impact under honesty
 
 ### Tutorial > Promo (Dev.to Strategy)
 - Don't write "I built X" — write "How to build X"
@@ -302,6 +304,35 @@ This keeps the autonomous loop making forward progress instead of retrying the s
 - One deep technical reply to someone's question (like the 内省+外求 discussion) is worth 10 promo posts
 - Reply format: validate their idea → show mapping to yours → ask an open question → don't drop links unless asked
 - "Your 'greed' framing is actually more visceral than our 'survival' framing" — upgrade, don't correct
+
+---
+
+## Web & API Best Practices (Proven Lightweight Stack)
+
+### Priority Order
+1. **`curl + jq`** — GitHub API, structured data. Always first choice. Free.
+2. **Jina Reader API** — `https://r.jina.ai/{url}` — extracts clean text from any article/blog. Free (20 RPM). No browser needed.
+   ```bash
+   curl -s "https://r.jina.ai/https://example.com/article" --proxy http://127.0.0.1:7890
+   ```
+3. **`browser_navigate`** — Only when interaction/clicking needed. Heavy, avoid for content extraction.
+4. ❌ **Crawl4AI** — Too heavy (Playwright + Chromium), conflicts with existing browser instance. Do NOT install.
+
+### Anti-Truncation Toolkit
+- **GitHub pagination**: Use `github_paginate()` from `~/.hermes/scripts/api_helpers.py`
+- **Pre-filter with jq**: `curl ... | jq '.items[:5] | .[] | {name, stars: .stargazers_count}'`
+- **Special characters**: Use `robust_json_loads()` from api_helpers.py
+- **Large responses**: Save to file first (`curl -o /tmp/x.json`), then process with `jq` or `python`
+- **GitHub API proxy**: Always use `--proxy http://127.0.0.1:7890` (direct access blocked in CN)
+
+### GitHub Awesome-List PR Workflow
+1. Fork target repo via browser (user action — token can't fork other orgs)
+2. Clone fork: `git clone --depth 1 https://TOKEN@github.com/USER/awesome-list.git`
+3. Create branch: `git checkout -b add-our-project`
+4. Insert entry in alphabetical order (use Python script for precision)
+5. Commit + push branch
+6. **User creates PR via browser** — GitHub link provided in output: `https://github.com/USER/awesome-list/pull/new/branch-name`
+7. Fine-grained token with only own-repo access CANNOT create cross-org PRs via API
 
 ---
 
@@ -347,6 +378,15 @@ curl -s "https://api.github.com/search/repositories?q=MCP+server+pushed:>2026-04
 
 ---
 
+## Self-Improvement Rules
+
+- **MD only by default**: Only modify soft constraints (SKILL.md, plan-tree, wiki, cron prompts, index.md)
+- **Code changes need user approval**: Python, shell scripts, Hermes source code, config files — always ask first
+- **Non-Hermes operations**: Full system access (git, curl, file management, system tools)
+- **Always backup before changes**: `~/.hermes/backups/pre-<description>-<date>/`
+- **Update wiki after every change**: Record what changed, why, and what to watch for
+- **Commit code changes to GitHub**: Every meaningful change gets a commit + push
+
 ## Anti-Patterns
 
 - Never block user interaction for background tasks
@@ -368,20 +408,65 @@ curl -s "https://api.github.com/search/repositories?q=MCP+server+pushed:>2026-04
 - **GitHub Search `created:>DATE` filters yield empty results for niche topics** — for fields like quadruped locomotion, strict date filters often return nothing. Use `sort=stars&order=desc` with broader keyword queries, or target known orgs (`unitree`, `boston-dynamics`) directly.
 
 
-## Borrowed Architectures (v0.3)
+## Architecture Evolution (v0.3)
 
-Key patterns borrowed from GenericAgent and ARIS after deep analysis:
+### Busy Lock (Key Design Decision)
 
-### From GenericAgent
-- **L1 ≤30-line index** (`~/.hermes/index.md`): Minimal sufficient pointer principle — upper layers only store shortest identifier to locate lower layers, one word more is redundancy
-- **Auto-crystallization**: When same pattern observed ≥3 times, automatically create a skill
-- **Action-Verified Only**: No Execution, No Memory — only tool-verified information enters long-term storage
-- **3-step finish hard constraint**: Every idle subtask MUST: (a) write idle-log, (b) update plan-tree timestamp, (c) check pending-tasks
+**Problem**: Cron executes heavy operations while user is chatting → resource conflict, session leaks.
+**User insight**: "强制关闭不是好主意，会让你做事情都失败" — don't force-kill, design around it.
 
-### From ARIS
-- **Meta-Optimize**: Analyze usage logs and propose optimizations to SKILL.md files, defaults, and workflow parameters
-- **Research Wiki pattern**: Persistent knowledge base with typed entity relationships (papers, ideas, experiments, claims + edges.jsonl)
-- **Cross-model adversarial review**: Use different models for execution vs. review to avoid single-model blind spots
+**Solution**: `~/.hermes/agent-busy.lock` with 10min auto-expiry:
+- User sends message → lock acquired (reason: `conversation`)
+- Idle loop triggers → lock present → lightweight scan only, write to `pending-tasks.md`
+- No lock → full idle loop execution
+- Lock auto-expires after 10min of no activity
+
+```
+You chatting → lock → cron defers
+You sleeping → no lock → cron works
+You return → lock re-created → cron defers immediately
+```
+
+**Never force-close sessions.** Design the system so conflicts don't happen.
+
+### Wiki Offload for Plan-Tree
+
+**User insight**: "非活跃的root可以只留下root，其他都放wiki里" — save tokens, keep plan-tree lean.
+
+**Pattern**: Active roots expand to lv.3. Inactive roots collapse to one line:
+```markdown
+- ENSURE_CONTINUATION [循环] [last: 2026-04-23 14:00 | ok] → wiki:plan-ENSURE-CONTINUATION
+```
+Full subtree lives in `~/llm-wiki/plan-ENSURE-CONTINUATION.md`. Expand when needed, collapse when done.
+
+### L1 ≤30-Line Index (From GenericAgent)
+
+`~/.hermes/index.md` — Minimal sufficient pointer principle. Upper layers store only shortest identifier to locate lower layers. One word more is redundancy. Ensures token efficiency (read index first, not full plan-tree).
+
+### 3-Step Finish Hard Constraint (From GenericAgent)
+
+Every idle subtask MUST complete ALL three before moving on:
+1. Write entry to `idle-log.md`
+2. Update plan-tree timestamps
+3. Check `pending-tasks.md` (remove completed, add new)
+
+Missing any step = progress loss risk.
+
+### Auto-Crystallization (From GenericAgent)
+
+When same operational pattern observed ≥3 times → automatically create a skill via `skill_manage(create)`. Counter tracked per session.
+
+### Meta-Optimize (From ARIS)
+
+Analyze idle-log and session history to find:
+- Skills invoked most/least
+- Skills that fail most
+- Prompts that need updating
+Propose concrete SKILL.md patches.
+
+### Cross-Model Adversarial Review (From ARIS)
+
+Use GLM-5.1 for execution, DeepSeek-v3.2 for review. Different models have different blind spots — adversarial review catches more issues than self-review.
 
 ### Comparison Table
 
@@ -392,3 +477,4 @@ Key patterns borrowed from GenericAgent and ARIS after deep analysis:
 | Idle trigger | Manual autonomous SOP | Sleep mode | Cron 30min + busy lock |
 | Finish guarantee | 3-step hard constraint | None | 3-step hard constraint |
 | Token efficiency | <30K ctx (6x less) | Standard | Index-first routing |
+| Conflict handling | N/A | N/A | Busy lock with auto-expiry |
