@@ -5,7 +5,7 @@
 
 ## 🎯 What It Is
 
-Agent Kit is the **per-agent toolkit** — the software every agent in the fleet runs independently. It pairs with [Fleet MC](https://github.com/autopopo-cyber/xianqin-mc) (organization layer) and [LLM Wiki](https://github.com/autopopo-cyber/llm-wiki) (knowledge base) to form the three pillars of the agent fleet.
+Agent Kit is the **per-agent toolkit** — the software every agent in the fleet runs independently. It pairs with [Fleet MC](https://github.com/autopopo-cyber/fleet-mc) (organization layer) and [LLM Wiki](https://github.com/autopopo-cyber/llm-wiki) (knowledge base) to form the three pillars of the agent fleet.
 
 ```
 ┌─────────────┐  ┌──────────┐  ┌──────────┐
@@ -114,7 +114,7 @@ cron (every 10 min, QA agents)
 
 ## 🔗 Related
 
-- [Fleet MC](https://github.com/autopopo-cyber/xianqin-mc) — Multi-agent orchestration
+- [Fleet MC](https://github.com/autopopo-cyber/fleet-mc) — Multi-agent orchestration
 - [LLM Wiki](https://github.com/autopopo-cyber/llm-wiki) — Fleet knowledge base
 - [Development Workflow](https://github.com/autopopo-cyber/llm-wiki/blob/main/仙秦帝国/软件开发流程.md) — Full dev→QA pipeline
 
