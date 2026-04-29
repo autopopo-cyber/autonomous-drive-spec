@@ -179,6 +179,8 @@ else
 fi
 
 # ═══════════════════════════════════════════
+# ═══ context refresh ═══
+MC_API_KEY="$MC_API_KEY" python3 /home/agentuser/.xianqin/packages/context-engine/assemble-v2.py "$GID" 2>/dev/null || true
 # Phase 0.5: 锁检查 — 僵尸锁由心跳负责清理
 # ═══════════════════════════════════════════
 if parse_lock; then
