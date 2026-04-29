@@ -91,6 +91,24 @@ else
     FAIL=$((FAIL+1))
 fi
 
+# ─── Test 12: 灌顶验证 ───
+echo -n "[TEST 12] 灌顶后知识条目数... "
+FAIL_BEFORE=$FAIL
+for gid in 101 102 103 104 105 106 107 108; do
+  ctx="$CONTEXT_HOME/$gid"
+  if [ -f "$ctx/memory.json" ]; then
+    entries=$(python3 -c "import json; print(len(json.load(open('$ctx/memory.json')).get('entries',[])))" 2>/dev/null || echo 0)
+    if [ "$entries" -lt 5 ]; then
+      echo "❌ GID=$gid memory只有${entries}条"
+      FAIL=$((FAIL+1))
+    fi
+  fi
+done
+if [ "$FAIL" -eq "$FAIL_BEFORE" ]; then
+  echo "✅ (所有agent memory≥5条)"
+  PASS=$((PASS+1))
+fi
+
 echo ""
 echo "========================================="
 echo " 结果: $PASS PASS, $FAIL FAIL"

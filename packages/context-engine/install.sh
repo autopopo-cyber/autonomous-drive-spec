@@ -73,6 +73,11 @@ done
 
 echo ""
 echo "安装完成。下一步："
+
+# ─── 灌顶：从wiki提取知识 ───
+if [ -f "$PACKAGE_DIR/bootstrap-init.py" ]; then
+  MC_API_KEY="${MC_API_KEY:-}" python3 "$PACKAGE_DIR/bootstrap-init.py" "$gid" 2>/dev/null || true
+fi
 echo "1. 配置 cron: context-assembler (每分钟) + context-backup (每天03:00)"
 echo "2. 配置 hermes config.yaml: prefill_messages_file → prefill.json"
 echo "3. 运行自测: ./scripts/selftest.sh"
