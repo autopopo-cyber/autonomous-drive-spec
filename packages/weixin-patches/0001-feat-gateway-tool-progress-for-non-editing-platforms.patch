@@ -1,0 +1,76 @@
+From fda6f767897ac7da28f85f947426974802d0db15 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E8=90=B1=E8=90=B1?= <xuanxuan@hermes.dev>
+Date: Wed, 29 Apr 2026 08:33:49 +0800
+Subject: [PATCH] feat(gateway): tool progress for non-editing platforms
+ (WeChat)
+
+Previously, platforms without edit_message support (WeChat, iMessage)
+silently dropped all tool progress messages. Now they fall back to
+sending each new tool call as a separate throttled message.
+---
+ gateway/run.py | 32 ++++++++++++++++++--------------
+ 1 file changed, 18 insertions(+), 14 deletions(-)
+
+diff --git a/gateway/run.py b/gateway/run.py
+index f5c1858d..52de1666 100644
+--- a/gateway/run.py
++++ b/gateway/run.py
+@@ -9484,22 +9484,17 @@ class GatewayRunner:
+             if not adapter:
+                 return
+ 
+-            # Skip tool progress for platforms that don't support message
+-            # editing (e.g. iMessage/BlueBubbles) — each progress update
+-            # would become a separate message bubble, which is noisy.
+-            if type(adapter).edit_message is BasePlatformAdapter.edit_message:
+-                while not progress_queue.empty():
+-                    try:
+-                        progress_queue.get_nowait()
+-                    except Exception:
+-                        break
+-                return
++            # Platforms that don't support message editing (e.g. WeChat, iMessage)
++            # cannot accumulate multiple tool lines into a single edited message.
++            # Fall back to sending each new tool as a separate message throttled
++            # to avoid rate limits.
++            _no_edit_support = type(adapter).edit_message is BasePlatformAdapter.edit_message
+ 
+             progress_lines = []      # Accumulated tool lines
+             progress_msg_id = None   # ID of the progress message to edit
+-            can_edit = True          # False once an edit fails (platform doesn't support it)
+-            _last_edit_ts = 0.0      # Throttle edits to avoid Telegram flood control
+-            _PROGRESS_EDIT_INTERVAL = 1.5  # Minimum seconds between edits
++            can_edit = not _no_edit_support
++            _last_edit_ts = 0.0      # Throttle to avoid platform flood control
++            _PROGRESS_EDIT_INTERVAL = 2.0 if _no_edit_support else 1.5
+ 
+             while True:
+                 try:
+@@ -9592,7 +9587,7 @@ class GatewayRunner:
+                                 progress_lines.append(raw)
+                         except Exception:
+                             break
+-                    # Final edit with all remaining tools (only if editing works)
++                    # Final: send remaining tools
+                     if can_edit and progress_lines and progress_msg_id:
+                         full_text = "\n".join(progress_lines)
+                         try:
+@@ -9603,6 +9598,15 @@ class GatewayRunner:
+                             )
+                         except Exception:
+                             pass
++                    elif not can_edit and progress_lines:
++                        # Non-editing platforms: send each remaining line
++                        # as a separate message (throttled)
++                        for line in progress_lines:
++                            try:
++                                await adapter.send(chat_id=source.chat_id, content=line, metadata=_progress_metadata)
++                                await asyncio.sleep(1.0)  # Platform rate limit
++                            except Exception:
++                                pass
+                     return
+                 except Exception as e:
+                     logger.error("Progress message error: %s", e)
+-- 
+2.43.0
+
