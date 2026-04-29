@@ -426,4 +426,26 @@ PTEOF
 else
   echo "[#$GID] ⚠️ 执行完但LLM不通 — 释放锁" >&2
 fi
+
+# ═══════════════════════════════════════════
+# Phase 4: 提交产物到集散中心（v7.5）
+# ═══════════════════════════════════════════
+SUBMIT_HOST="${MC_SUBMIT_HOST:-100.80.136.1}"
+SUBMIT_USER="${MC_SUBMIT_USER:-agentuser}"
+SUBMIT_DIR="${MC_SUBMIT_DIR:-workspace/reviews}"
+SUBMIT_NAME="GID${GID}-T${TASK_ID}-$(date '+%H%M').md"
+
+if [ -s "$RESULT_FILE" ]; then
+  if [ "$GID" = "105" ]; then
+    # 本机直接 cp
+    cp "$RESULT_FILE" "$HOME/$SUBMIT_DIR/$SUBMIT_NAME" 2>/dev/null && \
+      echo "[#$GID] 📤 已提交: $SUBMIT_DIR/$SUBMIT_NAME" >&2
+  else
+    # 远程 scp
+    scp -o ConnectTimeout=5 "$RESULT_FILE" "${SUBMIT_USER}@${SUBMIT_HOST}:${SUBMIT_DIR}/${SUBMIT_NAME}" 2>/dev/null && \
+      echo "[#$GID] 📤 已提交: $SUBMIT_DIR/$SUBMIT_NAME" >&2 || \
+      echo "[#$GID] ⚠️ 提交失败(集散中心不可达)" >&2
+  fi
+fi
+
 # trap EXIT 自动 rm -f "$LOCK"
